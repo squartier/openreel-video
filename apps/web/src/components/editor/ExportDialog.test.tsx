@@ -1,8 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SourceExportMatch } from "../../services/export-source-match";
 import { ExportDialog } from "./ExportDialog";
 import { checkBrowserExportCapability } from "@openreel/core";
+import { useLaunchSessionStore } from "../../integration/launch-session-store";
+import type { LaunchSession } from "../../integration/launch-session";
 
 vi.mock("@openreel/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openreel/core")>();
@@ -23,7 +25,20 @@ const SOURCE_MATCH: SourceExportMatch = {
   sourceName: "source-match.mp4",
 };
 
+const good: LaunchSession = {
+  v: 1,
+  app: "nremote-builder",
+  label: "N-Remote Builder",
+  returnUrl: "https://buildnow.n-remote.com/api/video-editor/deliver/init",
+  token: "t",
+  maxBytes: 52428800,
+};
+
 describe("ExportDialog", () => {
+  beforeEach(() => {
+    useLaunchSessionStore.getState().clear();
+  });
+
   afterEach(() => {
     cleanup();
     vi.mocked(checkBrowserExportCapability).mockImplementation(() => new Promise<never>(() => undefined));
@@ -149,5 +164,54 @@ describe("ExportDialog", () => {
     expect(screen.getByRole("checkbox", { name: "Project settings" })).toBeChecked();
     expect(screen.queryByRole("checkbox", { name: "YouTube 4K" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "4K ProRes HQ" })).not.toBeInTheDocument();
+  });
+  it("offers Send to <label> and selects it by default when a launch session exists", () => {
+    useLaunchSessionStore.getState().setSession(good);
+    const onExport = vi.fn();
+    render(<ExportDialog isOpen onClose={vi.fn()} onExport={onExport} duration={5} />);
+    const select = screen.getByLabelText("Save video") as HTMLSelectElement;
+    expect(screen.getByRole("option", { name: "Send to N-Remote Builder" })).toBeInTheDocument();
+    expect(select.value).toBe("send");
+    expect(
+      screen.getByText("The video is uploaded to N-Remote Builder when the export finishes. You can still download it."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Export Video" }));
+    expect(onExport).toHaveBeenCalledWith(expect.objectContaining({ format: "mp4" }), "send");
+  });
+
+  it("does not offer send without a session", () => {
+    const onExport = vi.fn();
+    render(<ExportDialog isOpen onClose={vi.fn()} onExport={onExport} duration={5} />);
+    expect(screen.queryByRole("option", { name: /Send to/ })).toBeNull();
+    expect((screen.getByLabelText("Save video") as HTMLSelectElement).value).toBe("download");
+    fireEvent.click(screen.getByRole("button", { name: "Export Video" }));
+    expect(onExport).toHaveBeenCalledWith(expect.anything(), "download");
+  });
+
+  it("can switch from send back to a plain download", () => {
+    useLaunchSessionStore.getState().setSession(good);
+    const onExport = vi.fn();
+    render(<ExportDialog isOpen onClose={vi.fn()} onExport={onExport} duration={5} />);
+    fireEvent.change(screen.getByLabelText("Save video"), { target: { value: "download" } });
+    expect(screen.queryByText(/is uploaded to N-Remote Builder/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Export Video" }));
+    expect(onExport).toHaveBeenCalledWith(expect.anything(), "download");
+  });
+
+  it("warns before export when the estimated size is above the session's maxBytes", () => {
+    useLaunchSessionStore.getState().setSession({ ...good, maxBytes: 1024 * 1024 });
+    render(<ExportDialog isOpen onClose={vi.fn()} onExport={vi.fn()} duration={60} />);
+    expect(screen.getByText(/^Estimated size \d+\.\d MB is above the 1\.0 MB N-Remote Builder accepts\.$/)).toBeInTheDocument();
+  });
+
+  it("does not warn when the estimate fits, or when download is chosen", () => {
+    useLaunchSessionStore.getState().setSession({ ...good, maxBytes: 10 * 1024 * 1024 * 1024 });
+    const { unmount } = render(<ExportDialog isOpen onClose={vi.fn()} onExport={vi.fn()} duration={60} />);
+    expect(screen.queryByText(/^Estimated size/)).toBeNull();
+    unmount();
+    useLaunchSessionStore.getState().setSession({ ...good, maxBytes: 1024 * 1024 });
+    render(<ExportDialog isOpen onClose={vi.fn()} onExport={vi.fn()} duration={60} />);
+    fireEvent.change(screen.getByLabelText("Save video"), { target: { value: "download" } });
+    expect(screen.queryByText(/^Estimated size/)).toBeNull();
   });
 });

@@ -21,6 +21,8 @@ import { ExportDialog } from "./ExportDialog";
 import { CompressDialog } from "./CompressDialog";
 import { deriveSourceExportMatch } from "../../services/export-source-match";
 import { useExportRunner, extForFormat, exportFilename, type ExportDeliveryMode } from "../../services/export-runner";
+import { sendDeliveryOptions } from "../../integration/send-flow"; // N-REMOTE INTEGRATION
+import { SendResultDialog } from "../../integration/SendResultDialog"; // N-REMOTE INTEGRATION
 import { ScreenRecorder } from "./ScreenRecorder";
 import { HistoryPanel } from "./inspector/HistoryPanel";
 import { ProjectSwitcher } from "./ProjectSwitcher";
@@ -228,7 +230,9 @@ export const Toolbar: React.FC = () => {
 
       try {
         const ext = extForFormat(settings.format);
-        const writable = await showSavePicker(exportFilename(project.name, ext), ext, { delivery });
+        const writable = await showSavePicker(exportFilename(project.name, ext), ext, delivery === "send" // N-REMOTE INTEGRATION
+          ? sendDeliveryOptions(ext, settings, project) // N-REMOTE INTEGRATION
+          : { delivery });
 
         beginExport(writable);
 
@@ -570,6 +574,8 @@ export const Toolbar: React.FC = () => {
         hasAudio={project.timeline.tracks.some((track) => trackHasAudioItems(project, track.id))}
         markedRange={loopEnd > loopStart ? { startTime: loopStart, endTime: loopEnd } : null}
       />
+      {/* N-REMOTE INTEGRATION */}
+      <SendResultDialog />
 
       <ScreenRecorder
         isOpen={activeModal === "recorder"}

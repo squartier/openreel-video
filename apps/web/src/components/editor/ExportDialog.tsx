@@ -75,6 +75,8 @@ import {
 import { EDITING_FRAME_RATE_OPTIONS } from "./editing-frame-rate";
 import type { ExportDeliveryMode } from "../../services/export-runner";
 import { formatFrameTimecode } from "../../utils/frame-timecode";
+import { useLaunchSessionStore } from "../../integration/launch-session-store"; // N-REMOTE INTEGRATION
+import { formatMb } from "../../integration/send-flow"; // N-REMOTE INTEGRATION
 
 const WEB_EXPORT_GUARDRAIL_MESSAGE =
   "ProRes, transparency, and high bit depth require the desktop encoder. You can export an H.264 MP4 without transparency in this browser.";
@@ -175,7 +177,11 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   }), [exportSection, validMarkedRange]);
   const isDesktop =
     typeof window !== "undefined" && window.openreel?.platform === "desktop";
-  const [delivery, setDelivery] = useState<ExportDeliveryMode>(isDesktop ? "file" : "download");
+  // N-REMOTE INTEGRATION: "Send to <label>" is offered (and preselected) only on the web with a launch session.
+  const session = useLaunchSessionStore((s) => s.session); // N-REMOTE INTEGRATION
+  const canSend = !isDesktop && !!session; // N-REMOTE INTEGRATION
+  const [deliveryChoice, setDelivery] = useState<ExportDeliveryMode>(canSend ? "send" : isDesktop ? "file" : "download"); // N-REMOTE INTEGRATION
+  const delivery: ExportDeliveryMode = deliveryChoice === "send" && !canSend ? (isDesktop ? "file" : "download") : deliveryChoice; // N-REMOTE INTEGRATION
   const [capabilityError, setCapabilityError] = useState<string | null>(null);
   const [checkingCapability, setCheckingCapability] = useState(false);
   const [browserAudioCodec, setBrowserAudioCodec] = useState<string | null>(null);
@@ -544,6 +550,14 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
+
+  // N-REMOTE INTEGRATION: pre-export size warning, from the same estimate the footer shows.
+  const sendEstimatedBytes = activeTab === "reduce" && reducePlan
+    ? reduceEstimatedBytes
+    : (((activeTab === "presets" && selectedPreset ? (selectedPreset.settings as VideoExportSettings).bitrate || 8000 : customSettings.bitrate) * 1000 * duration) / 8);
+  const sendSizeWarning = delivery === "send" && session?.maxBytes !== undefined && duration > 0 && sendEstimatedBytes > session.maxBytes
+    ? `Estimated size ${formatMb(sendEstimatedBytes)} MB is above the ${formatMb(session.maxBytes)} MB ${session.label} accepts.`
+    : null; // N-REMOTE INTEGRATION
 
   if (!isOpen) return null;
 
@@ -1573,10 +1587,16 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             {!isDesktop && (
               <div className="space-y-1.5">
                 <Selector label="Save video" value={delivery} onChange={(value) => setDelivery(value as ExportDeliveryMode)} options={[
+                  ...(canSend && session ? [{ value: "send", label: `Send to ${session.label}` }] : []), // N-REMOTE INTEGRATION
                   { value: "download", label: "Download to this device" },
                   { value: "file", label: "Choose a file location" },
                 ]} width="100%" />
+                {delivery === "send" && session ? ( /* N-REMOTE INTEGRATION */
+                  <p className="text-[11px] text-fg-muted">The video is uploaded to {session.label} when the export finishes. You can still download it.</p>
+                ) : (
                 <p className="text-[11px] text-fg-muted">Export uses your original media at the selected quality. Choose a file location to stream large exports directly to disk.</p>
+                )}
+                {sendSizeWarning && <p className="rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-[11px] text-status-warning">{sendSizeWarning}</p> /* N-REMOTE INTEGRATION */}
               </div>
             )}
             {!isDesktop && (
