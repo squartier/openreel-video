@@ -10,6 +10,7 @@ import { registerServiceWorker } from "./services/service-worker";
 import { initCustomFonts } from "./components/editor/inspector/font-options";
 import { setEncoderBackendFactory } from "@openreel/core";
 import { NativeFFmpegBackend } from "./services/native-ffmpeg-backend";
+import { captureLaunchSession } from "./integration/capture-launch-session";
 
 const DesktopApp = React.lazy(() =>
   import("./desktop/DesktopApp").then((module) => ({
@@ -55,5 +56,8 @@ async function renderApplication(): Promise<void> {
     </React.StrictMode>,
   );
 }
+
+// N-REMOTE INTEGRATION: read and strip ?launch= before the hash router runs.
+if (!isDesktop) captureLaunchSession();
 
 void renderApplication();
