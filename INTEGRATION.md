@@ -36,7 +36,7 @@ The calling app opens (new tab) `https://<editor-host>/?launch=<base64url(JSON)>
 - The editor **validates `returnUrl`'s origin against an allowlist baked in at
   build time** (`VITE_ALLOWED_RETURN_ORIGINS`, comma-separated). A launch with
   a non-allowlisted origin is refused with a visible message and the editor
-  opens as a plain editor. This is the anti-leak guard from §4.
+  opens as a plain editor. This is so a crafted link cannot make the editor upload to an arbitrary host.
 - The editor stores the launch session in `sessionStorage` (survives reloads
   in that tab, dies with it), strips `?launch=` from the URL, and shows a
   small banner "Editing for <label>".
@@ -94,13 +94,13 @@ On export completion in `send` mode:
    → "Your session for <label> has expired — download the file and upload it
    there." No automatic retry loop.
 
-Cross-origin notes (verified): the editor serves itself with
+Cross-origin notes: the editor serves itself with
 `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
 require-corp` (upstream `apps/web/public/_headers`, needed for ffmpeg.wasm's
 SharedArrayBuffer). A CORS `fetch`/XHR to the receiver is allowed under those
 headers; the **receiver must answer the preflight** (`OPTIONS`) with
 `Access-Control-Allow-Origin: https://<editor-host>`, `Allow-Headers:
-authorization, content-type`, `Allow-Methods: POST`. Upstream also sends
+authorization, content-type`, `Allow-Methods: POST, OPTIONS`. Upstream also sends
 `X-Frame-Options: DENY`; we keep it (no iframe embedding in this version).
 
 Size limits: upstream refuses an in-memory download above 128 MB and prefers
@@ -113,21 +113,96 @@ already upload 25 MB directly, so it is at least that; 50 MB is unverified).
 
 ## Receiver obligations
 
-- Answer the CORS preflight (`OPTIONS`) with `Access-Control-Allow-Origin: https://<editor-host>`, `Access-Control-Allow-Headers: authorization, content-type`, `Access-Control-Allow-Methods: POST`.
-- Check the Bearer token on init and complete; answer 401/403 for a bad or expired token.
-- Respond with the documented shapes: init `200 { ok: true, upload: { url, method: "PUT", headers? }, completeUrl }` or `4xx { ok: false, message }`; complete `200 { ok: true, url?, message? }` or `4xx/5xx { ok: false, message }`.
-- The upload URL is single-use, and its origin must be on the editor's `VITE_ALLOWED_UPLOAD_ORIGINS`.
+A receiver (the app that launches the editor) must satisfy all of the following.
+
+1. **Return origin allowlisted.** The origin of `returnUrl` must be on the editor's `VITE_ALLOWED_RETURN_ORIGINS`.
+2. **Upload origin allowlisted.** The origin of the init response's `upload.url` must be on the editor's `VITE_ALLOWED_UPLOAD_ORIGINS`.
+3. **`completeUrl` has exactly the same origin as `returnUrl`.** The editor refuses otherwise, because the Bearer token is posted to `completeUrl`.
+4. **CORS.** Both `returnUrl` and `completeUrl` must answer the `OPTIONS` preflight with:
+   - `Access-Control-Allow-Origin: <editor origin>`
+   - `Access-Control-Allow-Methods: POST, OPTIONS`
+   - `Access-Control-Allow-Headers: authorization, content-type`
+
+   The upload target is PUT directly by the browser and must accept CORS from the editor origin as well (Supabase signed upload URLs do).
+5. **Token.** The token is opaque to the editor. It must be short-lived and single-purpose. Check it on init and on complete.
+6. **Response shapes.**
+   - Init: `200 { ok: true, upload: { url, method: "PUT", headers? }, completeUrl }`.
+   - Complete: `200 { ok: true, url?, message? }`.
+   - Failures: `{ ok: false, message }`. A 401 or 403 means "session expired" and the editor says so.
+7. **`backUrl`** must be http(s) or it is ignored.
+8. **`maxBytes`** is advisory in the export dialog (a warning before export) and is enforced before the upload starts.
 
 ## Environment variables
 
-Build-time, set in `apps/web/.env` (see `apps/web/.env.example`):
+All are build-time (Vite) variables. Set them in `apps/web/.env` locally (see `apps/web/.env.example`) or in the Cloudflare Pages project. **An empty value counts as unset**, so the default applies.
 
-- `VITE_ALLOWED_RETURN_ORIGINS`: comma-separated origins a launch `returnUrl` may use.
-- `VITE_ALLOWED_UPLOAD_ORIGINS`: comma-separated origins an upload target may use.
-- `VITE_BRAND_NAME`: product name shown in the editor.
-- `VITE_BRAND_LOGO_URL`: logo image URL shown in the editor.
-- `VITE_OPENREEL_CLOUD_URL`: OpenReel cloud URL; empty by default.
+| Variable | Required? | Default | Meaning |
+| --- | --- | --- | --- |
+| `VITE_ALLOWED_RETURN_ORIGINS` | Required for launch | none | Comma-separated origins a launch `returnUrl` may use. |
+| `VITE_ALLOWED_UPLOAD_ORIGINS` | Required for delivery | none | Comma-separated origins an upload target may use. |
+| `VITE_BRAND_NAME` | No | OpenReel's own name | Product name shown in the editor. |
+| `VITE_BRAND_LOGO_URL` | No | OpenReel's own logo | Logo shown in the editor. Must be a same-origin path such as `/brand/logo.svg` under `apps/web/public`, because the page is served with `Cross-Origin-Embedder-Policy: require-corp`. |
+| `VITE_OPENREEL_CLOUD_URL` | No | empty (cloud off) | Upstream OpenReel cloud URL. Leave empty to switch share links and cloud templates off. |
+| `VITE_PUBLIC_POSTHOG_KEY`, `VITE_PUBLIC_POSTHOG_HOST` | No | empty (analytics off) | PostHog analytics. Leave empty. |
+
+The two allowlists are **required** for launch and delivery to work at all. With both empty, every launch is refused and the editor behaves as plain OpenReel.
 
 ## Hosting
 
-To be filled in Task 9.
+Cloudflare Pages project `build-video`:
+
+- URL: `https://build-video.pages.dev`. The custom domain `video.n-remote.com` will be attached later.
+- Git: GitHub `squartier/openreel-video`, production branch `main`.
+- Framework preset: None.
+- Root directory: `apps/web`. Upstream's `functions/` directory (the AI key relay at `functions/api/proxy`) lives there, so the root must be `apps/web` for Pages to deploy it.
+- Build command: `pnpm -w install --frozen-lockfile && pnpm -w build`
+- Build output directory: `dist`
+
+Build environment variables:
+
+- `NODE_VERSION=22`
+- `PNPM_VERSION=11.7.0`
+- `SKIP_DEPENDENCY_INSTALL=1`
+
+App environment variables (set for **both Production and Preview** in the Pages project):
+
+- `VITE_ALLOWED_RETURN_ORIGINS=https://buildnow.n-remote.com`
+- `VITE_ALLOWED_UPLOAD_ORIGINS=https://qvedzwdlpdhzoumuxcsc.supabase.co`
+- `VITE_BRAND_NAME=N-Remote Video`
+- `VITE_BRAND_LOGO_URL`: optional, same-origin path only (see the table above).
+- `VITE_OPENREEL_CLOUD_URL`: left **empty** (cloud off).
+
+`apps/web/public/_headers` sets COOP/COEP for static responses only. Pages Functions responses (the `functions/api/proxy` AI key relay) are JSON fetches and do not need them.
+
+## What is switched off on this host
+
+- Share links and cloud templates: they need the upstream cloud, and `VITE_OPENREEL_CLOUD_URL` is empty.
+- PostHog analytics: the keys are empty.
+
+AI editing (OpenAI, Anthropic, ElevenLabs) works with the user's own key, relayed by the same-origin Pages Function.
+
+**Known external dependency:** auto-caption models are downloaded by the browser from `https://media.openreel.video/models/` (`apps/web/src/workers/whisper-worker.ts`). No user content is sent there, but captions depend on that host being up. Follow-up: point `MODEL_HOST` at the Hugging Face default when the cloud is off.
+
+## Rebasing on upstream
+
+```bash
+git fetch upstream && git rebase upstream/main
+```
+
+Then re-check every touch point in upstream files:
+
+```bash
+grep -rn "N-REMOTE INTEGRATION" apps/web/src apps/web/index.html
+```
+
+lists every upstream edit. `apps/web/src/vite-env.d.ts` and `apps/web/index.html` are N-Remote touch points that may collide if upstream adds its own changes there.
+
+## Manual acceptance checklist
+
+Run these on the deployed site (`https://build-video.pages.dev`).
+
+- [ ] Open `/` with no `?launch=`: plain OpenReel loads, no banner.
+- [ ] Open `/?launch=<base64url(good launch with returnUrl on buildnow.n-remote.com)>`: the banner "Editing for N-Remote Builder" shows, the URL no longer contains `launch`, and a reload keeps the banner.
+- [ ] Open with a `returnUrl` on another origin: an alert banner shows, there is no Send option, and DevTools Network shows no request to that origin.
+- [ ] Import a clip and export with "Send to N-Remote Builder" against the builder's production endpoints. Until the adapter is deployed, check that the init request is sent and a 404/503 shows as a failure with Download still available.
+- [ ] Import a clip and export with "Download to this device": behaviour is unchanged.
