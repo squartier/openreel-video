@@ -580,6 +580,65 @@ describe("useExportRunner showSavePicker fallback", () => {
     expect(click).toHaveBeenCalledOnce();
   });
 
+  // N-REMOTE INTEGRATION
+  it("send delivery hands the finished file to onFile instead of downloading", async () => {
+    const onFile = vi.fn();
+    const picker = vi.fn();
+    win.showSaveFilePicker = picker;
+    const writable = await createDownloadWritable("clip.mp4", "video/mp4", { delivery: "send", onFile });
+    await writable.write(new Uint8Array([1, 2, 3]));
+    await writable.close();
+    expect(onFile).toHaveBeenCalledTimes(1);
+    const [file, name] = onFile.mock.calls[0] as [Blob, string];
+    expect(name).toBe("clip.mp4");
+    expect(file.type).toBe("video/mp4");
+    expect(file.size).toBe(3);
+    expect(picker).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  // N-REMOTE INTEGRATION
+  it("download delivery is unchanged when onFile is absent", async () => {
+    const writable = await createDownloadWritable("clip.mp4", "video/mp4", { delivery: "download" });
+    await writable.write(new Uint8Array([1, 2, 3]));
+    await writable.close();
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  // N-REMOTE INTEGRATION
+  it("send delivery on the OPFS sink hands over the File", async () => {
+    const onFile = vi.fn();
+    const opfsFile = new File([new Uint8Array([7, 8, 9, 10])], "tmp.tmp", { type: "video/mp4" });
+    const opfsWritable = {
+      seek: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockResolvedValue(undefined),
+      truncate: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+      abort: vi.fn().mockResolvedValue(undefined),
+    };
+    const fileHandle = {
+      createWritable: vi.fn().mockResolvedValue(opfsWritable),
+      getFile: vi.fn().mockResolvedValue(opfsFile),
+    };
+    const removeEntry = vi.fn().mockResolvedValue(undefined);
+    async function* noKeys(): AsyncGenerator<string> {}
+    setOpfs({
+      getDirectory: vi.fn().mockResolvedValue({
+        getFileHandle: vi.fn().mockResolvedValue(fileHandle),
+        removeEntry,
+        keys: noKeys,
+      }),
+    });
+    const writable = await createDownloadWritable("clip.mp4", "video/mp4", { delivery: "send", onFile });
+    await writable.write(new Uint8Array([7, 8, 9, 10]));
+    await writable.close();
+    expect(onFile).toHaveBeenCalledTimes(1);
+    expect(onFile.mock.calls[0][0]).toBe(opfsFile);
+    expect(onFile.mock.calls[0][1]).toBe("clip.mp4");
+    expect(click).not.toHaveBeenCalled();
+    expect(removeEntry).not.toHaveBeenCalled();
+  });
+
   it("keeps a selected destination write-open failure visible", async () => {
     win.showSaveFilePicker = vi.fn().mockResolvedValue({ createWritable: vi.fn().mockRejectedValue(new DOMException("Permission denied", "SecurityError")) });
     await expect(createDownloadWritable("Clip.mp4", "video/mp4")).rejects.toMatchObject({ name: "SecurityError" });
