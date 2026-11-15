@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { ToolcraftText as Text, ToolcraftButton as Button } from "@openreel/ui";
 
 import { Toolbar } from "./Toolbar";
+import { LaunchBanner } from "../../integration/LaunchBanner"; // N-REMOTE INTEGRATION
 import { EditorActionRail } from "./EditorActionRail";
 import { AssetsPanel } from "./AssetsPanel";
 import { Preview } from "./Preview";
@@ -361,6 +362,8 @@ export const EditorInterface: React.FC = () => {
       ref={rootRef}
       className={`editor-shell w-full h-full bg-bg text-fg overflow-hidden font-sans select-none relative z-20 flex flex-col ${compact ? "editor-compact" : ""}`}
     >
+      {/* N-REMOTE INTEGRATION */}
+      <LaunchBanner />
       <Toolbar />
 
       <div className="editor-body flex-1 min-h-0 flex">
