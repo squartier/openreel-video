@@ -8,9 +8,19 @@
 const isDev = import.meta.env.DEV;
 
 /** OpenReel cloud services */
-export const OPENREEL_CLOUD_URL = isDev
-  ? "http://localhost:8787"
-  : "https://api.openreel.video";
+// N-REMOTE INTEGRATION: the cloud is opt-in. An unset or empty
+// VITE_OPENREEL_CLOUD_URL means OFF in production (nothing leaves the host);
+// dev keeps upstream's localhost default so upstream dev flows still work.
+const configuredCloudUrl = import.meta.env.VITE_OPENREEL_CLOUD_URL;
+export const OPENREEL_CLOUD_URL: string =
+  typeof configuredCloudUrl === "string" && configuredCloudUrl !== ""
+    ? configuredCloudUrl
+    : isDev
+      ? "http://localhost:8787"
+      : "";
+
+// N-REMOTE INTEGRATION
+export const CLOUD_ENABLED = OPENREEL_CLOUD_URL !== "";
 
 /**
  * Third-party API base URLs.

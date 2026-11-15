@@ -8,6 +8,8 @@ import { useProjectStore } from "./stores/project-store";
 import { useRouter } from "./hooks/use-router";
 import { useProjectRecovery } from "./hooks/useProjectRecovery";
 import { useKieAIPoller } from "./hooks/useKieAIPoller";
+// N-REMOTE INTEGRATION
+import { CLOUD_ENABLED } from "./config/api-endpoints";
 import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core";
 import { ToolcraftText as Text } from "@openreel/ui";
 
@@ -54,9 +56,12 @@ function App() {
   const { route, params, navigate, parsedDimensions, fps } = useRouter();
   const hasHandledInitialRoute = useRef(false);
   useKieAIPoller();
+  // N-REMOTE INTEGRATION: with the cloud off, a share route shows the welcome screen
   const showWelcome =
-    ["welcome", "templates", "recent"].includes(route) && !skipWelcomeScreen;
-  const isSharePage = route === "share" && params.shareId;
+    (["welcome", "templates", "recent"].includes(route) || (!CLOUD_ENABLED && route === "share")) &&
+    !skipWelcomeScreen;
+  // N-REMOTE INTEGRATION: share links need the upstream cloud; off => welcome screen
+  const isSharePage = CLOUD_ENABLED && route === "share" && params.shareId;
 
   useEffect(() => {
     if (activeModal === "scriptView") setHasOpenedScriptView(true);

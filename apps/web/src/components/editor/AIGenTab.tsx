@@ -22,6 +22,8 @@ import { TemplatesBrowserPanel } from "./inspector/TemplatesBrowserPanel";
 import { MultiCameraPanel } from "./inspector/MultiCameraPanel";
 import { useTtsAudioStore } from "../../stores/tts-store";
 import { toast } from "../../stores/notification-store";
+// N-REMOTE INTEGRATION
+import { CLOUD_ENABLED } from "../../config/api-endpoints";
 
 type FeatureId = "templates" | "captions" | "tts" | "filters" | "music" | "multicam" | null;
 
@@ -124,7 +126,8 @@ export const AIGenTab: React.FC = () => {
   const renderActivePanel = () => {
     switch (activeFeature) {
       case "templates":
-        return <TemplatesBrowserPanel />;
+        // N-REMOTE INTEGRATION: cloud templates are off without the cloud
+        return CLOUD_ENABLED ? <TemplatesBrowserPanel /> : null;
       case "captions":
         return <AutoCaptionPanel />;
       case "tts":
@@ -200,18 +203,21 @@ export const AIGenTab: React.FC = () => {
         </FeatureSection>
 
         <FeatureSection title="Templates & Presets" icon={FileStack}>
-          <FeatureCard
-            icon={Layers}
-            title="Project Templates"
-            description="Start with pre-built project structures"
-            iconColor="text-green-400"
-            iconBg="bg-green-500/20"
-            activeBorder="border-green-500/50"
-            activeBg="bg-green-500/10"
-            activeRing="ring-green-500/30"
-            isActive={activeFeature === "templates"}
-            onClick={() => handleFeatureClick("templates")}
-          />
+          {/* N-REMOTE INTEGRATION: cloud templates card */}
+          {CLOUD_ENABLED && (
+            <FeatureCard
+              icon={Layers}
+              title="Project Templates"
+              description="Start with pre-built project structures"
+              iconColor="text-green-400"
+              iconBg="bg-green-500/20"
+              activeBorder="border-green-500/50"
+              activeBg="bg-green-500/10"
+              activeRing="ring-green-500/30"
+              isActive={activeFeature === "templates"}
+              onClick={() => handleFeatureClick("templates")}
+            />
+          )}
           <FeatureCard
             icon={Palette}
             title="Filter Presets"

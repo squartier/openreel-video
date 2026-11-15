@@ -18,6 +18,9 @@ import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core";
 import { useRouter } from "../../hooks/use-router";
 import { useEditorPreload } from "../../hooks/useEditorPreload";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
+// N-REMOTE INTEGRATION
+import { CLOUD_ENABLED } from "../../config/api-endpoints";
+import { BRAND_NAME, BRAND_LOGO_URL } from "../../integration/branding";
 
 const TemplateGallery = lazy(() =>
   import("./TemplateGallery").then((module) => ({ default: module.TemplateGallery })),
@@ -152,7 +155,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
   const { navigate } = useRouter();
   const { track } = useAnalytics();
 
-  const [viewMode, setViewMode] = useState<ViewMode>(initialTab ?? "home");
+  // N-REMOTE INTEGRATION: no Templates view without the cloud
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    initialTab === "templates" && !CLOUD_ENABLED ? "home" : (initialTab ?? "home"),
+  );
   const [hoveredFormat, setHoveredFormat] = useState<string | null>(null);
 
   useEditorPreload(true);
@@ -263,10 +269,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
           <div className="flex flex-col items-center text-center mb-12">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 text-primary">
-                <OpenReelLogo className="w-full h-full" />
+                {/* N-REMOTE INTEGRATION */}
+                {BRAND_LOGO_URL ? (
+                  <img src={BRAND_LOGO_URL} alt="" className="w-full h-full object-contain" />
+                ) : (
+                  <OpenReelLogo className="w-full h-full" />
+                )}
               </div>
               <Text type="body" color="primary" weight="semibold" className="text-xl text-text-primary tracking-tight">
-                Open Reel Video
+                {BRAND_NAME}
               </Text>
             </div>
 
@@ -352,13 +363,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
           </div>
 
           <div className="flex items-center justify-center gap-3">
-            <Button
-              label="Browse templates"
-              variant="secondary"
-              icon={<Layers size={16} aria-hidden />}
-              onClick={() => setViewMode("templates")}
-              className="rounded-xl"
-            />
+            {/* N-REMOTE INTEGRATION: templates browser is cloud-backed */}
+            {CLOUD_ENABLED && (
+              <Button
+                label="Browse templates"
+                variant="secondary"
+                icon={<Layers size={16} aria-hidden />}
+                onClick={() => setViewMode("templates")}
+                className="rounded-xl"
+              />
+            )}
             <Button
               label="Recent projects"
               variant="secondary"
