@@ -107,6 +107,14 @@ async function postJson(
   return { ok: true, value: json };
 }
 
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
 async function runInit(
   session: LaunchSession,
   meta: SendMeta,
@@ -139,6 +147,13 @@ async function runInit(
       kind: "refused",
       phase: "init",
       message: `Invalid response from ${session.label}`,
+    });
+  }
+  if (!sameOrigin(completeUrl, session.returnUrl)) {
+    return fail({
+      kind: "refused",
+      phase: "init",
+      message: `${session.label} returned an invalid completion address.`,
     });
   }
   return {
@@ -267,6 +282,7 @@ export function uploadWithProgress(
     xhr.onload = () => resolve({ status: xhr.status });
     xhr.onerror = () => reject(new Error("Upload failed (network)"));
     xhr.ontimeout = () => reject(new Error("Upload failed (network)"));
+    xhr.onabort = () => reject(new Error("Upload failed (network)"));
     xhr.open(method, url);
     for (const [key, value] of Object.entries(headers)) {
       xhr.setRequestHeader(key, value);

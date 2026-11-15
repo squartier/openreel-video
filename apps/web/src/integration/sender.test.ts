@@ -37,7 +37,7 @@ const res = (status: number, body: unknown) => ({
 class FakeXhr {
   static instances: FakeXhr[] = [];
   static nextStatus = 200;
-  static mode: "ok" | "error" = "ok";
+  static mode: "ok" | "error" | "abort" = "ok";
   opened: [string, string] | null = null;
   headers: Record<string, string> = {};
   body: unknown = null;
@@ -47,6 +47,7 @@ class FakeXhr {
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
   ontimeout: (() => void) | null = null;
+  onabort: (() => void) | null = null;
   constructor() {
     FakeXhr.instances.push(this);
   }
@@ -61,6 +62,10 @@ class FakeXhr {
     queueMicrotask(() => {
       if (FakeXhr.mode === "error") {
         this.onerror?.();
+        return;
+      }
+      if (FakeXhr.mode === "abort") {
+        this.onabort?.();
         return;
       }
       this.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 });
@@ -239,6 +244,42 @@ describe("sendExport", () => {
       phase: "upload",
       message: "Upload failed (network)",
     });
+  });
+
+  it("maps an XHR abort to network at phase upload", async () => {
+    FakeXhr.mode = "abort";
+    const fetchFn = vi.fn().mockResolvedValueOnce(res(200, initBody));
+    const result = await sendExport(session, file, meta, vi.fn(), { fetchFn, xhrFactory });
+    expect(result).toEqual({
+      ok: false,
+      kind: "network",
+      phase: "upload",
+      message: "Upload failed (network)",
+    });
+  });
+
+  it("refuses a completeUrl on another origin", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(res(200, { ...initBody, completeUrl: "https://evil.example/done" }));
+    const factory = vi.fn(xhrFactory);
+    const result = await sendExport(session, file, meta, vi.fn(), { fetchFn, xhrFactory: factory });
+    expect(result).toEqual({
+      ok: false,
+      kind: "refused",
+      phase: "init",
+      message: "N-Remote Builder returned an invalid completion address.",
+    });
+    expect(factory).not.toHaveBeenCalled();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an unparsable completeUrl", async () => {
+    const fetchFn = vi.fn().mockResolvedValueOnce(res(200, { ...initBody, completeUrl: "not a url" }));
+    const factory = vi.fn(xhrFactory);
+    const result = await sendExport(session, file, meta, vi.fn(), { fetchFn, xhrFactory: factory });
+    expect(result).toMatchObject({ ok: false, kind: "refused", phase: "init" });
+    expect(factory).not.toHaveBeenCalled();
   });
 
   it("defaults the upload method to PUT when absent", async () => {
