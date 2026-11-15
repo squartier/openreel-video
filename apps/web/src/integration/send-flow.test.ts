@@ -55,7 +55,7 @@ class FakeXhr {
   }
 }
 
-const deps = (fetchFn: ReturnType<typeof vi.fn>): SendDeps => ({
+const deps = (fetchFn: (...args: never[]) => unknown): SendDeps => ({
   fetchFn: fetchFn as unknown as SendDeps["fetchFn"],
   xhrFactory: () => new FakeXhr() as unknown as XMLHttpRequest,
   allowedUploadOrigins: ["https://qvedzwdlpdhzoumuxcsc.supabase.co"],
@@ -166,6 +166,28 @@ describe("startSend", () => {
   });
 });
 
+describe("generation guard", () => {
+  it("a superseded send cannot overwrite the newer send's state", async () => {
+    let resolveA: (v: unknown) => void = () => undefined;
+    const fetchA = vi.fn(() => new Promise((r) => { resolveA = r; }));
+    const fileA = new Blob(["a"], { type: "video/mp4" });
+    const fileB = new Blob(["bb"], { type: "video/mp4" });
+    const sendA = startSend(good, fileA, "a.mp4", meta, deps(fetchA));
+
+    const fetchB = vi.fn(() => new Promise<never>(() => undefined));
+    void startSend(good, fileB, "b.mp4", meta, deps(fetchB));
+
+    resolveA(res(401, { ok: false }));
+    await sendA;
+
+    const s = useSendStore.getState();
+    expect(s.status).toBe("sending");
+    if (s.status !== "sending") throw new Error("unreachable");
+    expect(s.file).toBe(fileB);
+    expect(s.filename).toBe("b.mp4");
+  });
+});
+
 describe("downloadKeptFile", () => {
   it("clicks an anchor with an object URL and revokes it later", () => {
     vi.useFakeTimers();
@@ -247,9 +269,11 @@ describe("sendDeliveryOptions (the guarded onFile)", () => {
 
   it("downloads instead when the session is gone", () => {
     useLaunchSessionStore.getState().clear();
+    const info = vi.spyOn(toast, "info").mockImplementation(() => undefined as never);
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     sendDeliveryOptions("mp4", {}, project).onFile(file, "clip.mp4");
     expect(click).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith("Session ended", "The video was downloaded instead of sent.");
     expect(useSendStore.getState().status).toBe("idle");
   });
 

@@ -3,7 +3,7 @@ import { toast } from "../stores/notification-store";
 import type { LaunchSession } from "./launch-session";
 import { useLaunchSessionStore } from "./launch-session-store";
 import { sendExport, type SendDeps, type SendMeta } from "./sender";
-import { useSendStore } from "./send-store";
+import { useSendStore, type SendState } from "./send-store";
 
 const MB = 1024 * 1024;
 
@@ -29,6 +29,9 @@ export function checkSendSize(
  * unexpected throw becomes a `failed` state so the kept file stays downloadable.
  * Calling it again (Retry) restarts from init with the same arguments.
  */
+/** Bumped by every startSend; a send whose generation is no longer current never writes (R7a). */
+let sendGeneration = 0;
+
 export async function startSend(
   session: LaunchSession,
   file: Blob,
@@ -36,7 +39,10 @@ export async function startSend(
   meta: SendMeta,
   deps?: SendDeps,
 ): Promise<void> {
-  const { set } = useSendStore.getState();
+  const generation = ++sendGeneration;
+  const set = (s: SendState) => {
+    if (generation === sendGeneration) useSendStore.getState().set(s);
+  };
   set({ status: "sending", phase: "init", fraction: 0, file, filename, meta });
   try {
     const result = await sendExport(
@@ -130,6 +136,7 @@ export function sendDeliveryOptions(
       if (!session) {
         // The session vanished mid-export: never lose the file.
         downloadKeptFile(file, filename);
+        toast.info("Session ended", "The video was downloaded instead of sent.");
         return;
       }
       const size = checkSendSize(session, file.size);

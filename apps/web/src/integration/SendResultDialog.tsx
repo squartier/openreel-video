@@ -17,7 +17,8 @@ function progressText(state: Extract<SendState, { status: "sending" }>): string 
 
 /**
  * Progress / success / failure of a "Send to <label>" hand-off. The kept file
- * is downloadable in every state. Close only resets the send store; it never
+ * is downloadable in every state. Close (not shown while sending; Escape and
+ * outside clicks are ignored) only resets the send store; it never
  * cancels the export runner (that would delete a file an upload may still read).
  */
 export function SendResultDialog() {
@@ -41,7 +42,9 @@ export function SendResultDialog() {
   const canRetry = state.status === "failed" && state.failure.kind !== "expired" && !!session;
 
   return (
-    <Dialog isOpen onOpenChange={(open) => !open && close()} width={440} purpose="status">
+    // Escape / outside click are ignored in every state: only the explicit Close
+    // button resets the store, so a stray click can never drop the kept file.
+    <Dialog isOpen onOpenChange={() => undefined} width={440} purpose="status">
       <DialogHeader title={title} subtitle={state.filename} />
       <div className="space-y-3 px-5 py-4 text-[13px] text-fg">
         {state.status === "sending" && (
@@ -64,7 +67,8 @@ export function SendResultDialog() {
         )}
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-        <Button label="Close" variant="ghost" onClick={close} />
+        {/* No Close while sending: the next progress tick would undo it. */}
+        {state.status !== "sending" && <Button label="Close" variant="ghost" onClick={close} />}
         <Button label="Download" variant="secondary" onClick={download} />
         {canRetry && session && (
           <Button

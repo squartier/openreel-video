@@ -76,6 +76,8 @@ describe("SendResultDialog", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "42");
     expect(screen.getByText("Uploading… 42%")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
   });
 
   it("on success shows the message and Back to <label>", () => {
@@ -135,6 +137,15 @@ describe("SendResultDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(useSendStore.getState().status).toBe("idle");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Escape does not dismiss a failed dialog: the store and the Download button stay", () => {
+    show(expired);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(useSendStore.getState().status).toBe("failed");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
   });
 
   it("follows the store from sending to sent", () => {
