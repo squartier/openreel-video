@@ -1,0 +1,1 @@
+All N-Remote code lives in this folder. Edits to upstream OpenReel files outside it are kept minimal and each is marked with a `// N-REMOTE INTEGRATION` comment so they can be found and re-checked when rebasing onto upstream.
