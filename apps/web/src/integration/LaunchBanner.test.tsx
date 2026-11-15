@@ -50,10 +50,44 @@ describe("LaunchBanner", () => {
   it("shows the refusal message when the launch was refused", () => {
     useLaunchSessionStore.getState().setRefusal("origin-not-allowed");
     render(<LaunchBanner />);
-    expect(screen.getByRole("alert")).toHaveTextContent(/could not start the session/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "N-Remote Video could not start the session from this link: the calling app is not allowed (origin-not-allowed).",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(useLaunchSessionStore.getState().refusal).toBeNull();
+  });
+});
+
+describe("LaunchBanner refusal wording", () => {
+  beforeEach(() => {
+    useLaunchSessionStore.getState().clear();
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it.each([
+    ["expired", "the link has expired (expired)"],
+    ["malformed", "the link is not valid (malformed)"],
+    ["invalid-fields", "the link is not valid (invalid-fields)"],
+    ["unsupported-version", "the link is not valid (unsupported-version)"],
+  ] as const)("maps %s to plain words with the code in parentheses", (code, words) => {
+    useLaunchSessionStore.getState().setRefusal(code);
+    render(<LaunchBanner />);
+    expect(screen.getByRole("alert")).toHaveTextContent(words);
+  });
+
+  it("puts the full text in a title on the truncating span (refusal and session)", () => {
+    useLaunchSessionStore.getState().setRefusal("expired");
+    const { unmount } = render(<LaunchBanner />);
+    const span = screen.getByRole("alert").querySelector("span.truncate");
+    expect(span?.getAttribute("title")).toBe(span?.textContent);
+    unmount();
+    useLaunchSessionStore.getState().setSession(good);
+    render(<LaunchBanner />);
+    const s2 = screen.getByRole("status").querySelector("span.truncate");
+    expect(s2?.getAttribute("title")).toBe("Editing for N-Remote Builder");
   });
 });
 

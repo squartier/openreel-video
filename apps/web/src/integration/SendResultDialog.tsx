@@ -6,7 +6,7 @@ import {
 } from "@openreel/ui";
 import { safeBackUrl } from "./LaunchBanner";
 import { useLaunchSessionStore } from "./launch-session-store";
-import { downloadKeptFile, startSend } from "./send-flow";
+import { cancelSend, downloadKeptFile, startSend } from "./send-flow";
 import { useSendStore, type SendState } from "./send-store";
 
 function progressText(state: Extract<SendState, { status: "sending" }>): string {
@@ -20,6 +20,8 @@ function progressText(state: Extract<SendState, { status: "sending" }>): string 
  * is downloadable in every state. Close (not shown while sending; Escape and
  * outside clicks are ignored) only resets the send store; it never
  * cancels the export runner (that would delete a file an upload may still read).
+ * While sending, Cancel aborts the send's own requests (cancelSend) so a stalled
+ * init / upload / complete can never trap the user.
  */
 export function SendResultDialog() {
   const state = useSendStore();
@@ -67,8 +69,12 @@ export function SendResultDialog() {
         )}
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-        {/* No Close while sending: the next progress tick would undo it. */}
-        {state.status !== "sending" && <Button label="Close" variant="ghost" onClick={close} />}
+        {/* No Close while sending (the next progress tick would undo it); Cancel aborts the send instead. */}
+        {state.status === "sending" ? (
+          <Button type="button" label="Cancel" variant="ghost" onClick={cancelSend} />
+        ) : (
+          <Button label="Close" variant="ghost" onClick={close} />
+        )}
         <Button label="Download" variant="secondary" onClick={download} />
         {canRetry && session && (
           <Button

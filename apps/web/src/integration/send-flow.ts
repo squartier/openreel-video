@@ -29,8 +29,40 @@ export function checkSendSize(
  * unexpected throw becomes a `failed` state so the kept file stays downloadable.
  * Calling it again (Retry) restarts from init with the same arguments.
  */
-/** Bumped by every startSend; a send whose generation is no longer current never writes (R7a). */
+/**
+ * Bumped by every startSend, every cancelSend and every synchronous onFile
+ * failure; a send whose generation is no longer current never writes (R7a).
+ */
 let sendGeneration = 0;
+/** Aborts the current send's fetch / XHR. */
+let currentController: AbortController | null = null;
+
+/**
+ * Start a new generation: abort whatever was in flight and return a setter
+ * that writes only while this generation is still current.
+ */
+function beginGeneration(): { set: (s: SendState) => void; controller: AbortController } {
+  const generation = ++sendGeneration;
+  currentController?.abort();
+  const controller = new AbortController();
+  currentController = controller;
+  const set = (s: SendState) => {
+    if (generation === sendGeneration) useSendStore.getState().set(s);
+  };
+  return { set, controller };
+}
+
+/**
+ * The user gave up on a stalled send: abort its requests, make sure nothing it
+ * still reports can write again, and close the dialog (idle). The export
+ * itself is untouched.
+ */
+export function cancelSend(): void {
+  sendGeneration++;
+  currentController?.abort();
+  currentController = null;
+  useSendStore.getState().reset();
+}
 
 export async function startSend(
   session: LaunchSession,
@@ -39,10 +71,10 @@ export async function startSend(
   meta: SendMeta,
   deps?: SendDeps,
 ): Promise<void> {
-  const generation = ++sendGeneration;
-  const set = (s: SendState) => {
-    if (generation === sendGeneration) useSendStore.getState().set(s);
-  };
+  const { set, controller } = beginGeneration();
+  const outer = deps?.signal;
+  if (outer?.aborted) controller.abort();
+  else outer?.addEventListener("abort", () => controller.abort(), { once: true });
   set({ status: "sending", phase: "init", fraction: 0, file, filename, meta });
   try {
     const result = await sendExport(
@@ -50,7 +82,7 @@ export async function startSend(
       file,
       meta,
       ({ phase, fraction }) => set({ status: "sending", phase, fraction, file, filename, meta }),
-      deps,
+      { ...deps, signal: controller.signal },
     );
     if (result.ok) {
       set({ status: "sent", url: result.url, message: result.message, file, filename });
@@ -147,7 +179,8 @@ export function sendDeliveryOptions(
       }
       void startSend(session, file, filename, meta);
     } catch (error) {
-      useSendStore.getState().set({
+      // Through a fresh generation: an older in-flight send can no longer overwrite this.
+      beginGeneration().set({
         status: "failed",
         failure: {
           kind: "network",

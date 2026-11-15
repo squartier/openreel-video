@@ -43,7 +43,8 @@ The calling app opens (new tab) `https://<editor-host>/?launch=<base64url(JSON)>
 - `maxBytes`: when set, the export dialog warns before export when the
   configured bitrate × duration would exceed it, and refuses delivery (not
   export) of a file above it.
-- `suggested` preselects export settings; the user can change them.
+- `suggested` is accepted and ignored in this version (reserved: a future
+  version preselects container/preset).
 - Reserved for a later phase: `assets: [{url, name}]` to pre-load the caller's
   media. Not implemented now; the field is documented as reserved so
   callers do not invent their own.
@@ -129,8 +130,10 @@ A receiver (the app that launches the editor) must satisfy all of the following.
    - Init: `200 { ok: true, upload: { url, method: "PUT", headers? }, completeUrl }`.
    - Complete: `200 { ok: true, url?, message? }`.
    - Failures: `{ ok: false, message }`. A 401 or 403 means "session expired" and the editor says so.
-7. **`backUrl`** must be http(s) or it is ignored.
-8. **`maxBytes`** is advisory in the export dialog (a warning before export) and is enforced before the upload starts.
+7. **Absolute URLs.** `upload.url` and `completeUrl` must be absolute URLs; relative ones are refused.
+8. **`https:` origins.** Every origin on either allowlist must be `https:`. Only `http://localhost[:port]` is exempt, for development.
+9. **`backUrl`** must be http(s) or it is ignored.
+10. **`maxBytes`** is advisory in the export dialog (a warning before export) and is enforced before the upload starts.
 
 ## Environment variables
 
@@ -140,7 +143,7 @@ All are build-time (Vite) variables. Set them in `apps/web/.env` locally (see `a
 | --- | --- | --- | --- |
 | `VITE_ALLOWED_RETURN_ORIGINS` | Required for launch | none | Comma-separated origins a launch `returnUrl` may use. |
 | `VITE_ALLOWED_UPLOAD_ORIGINS` | Required for delivery | none | Comma-separated origins an upload target may use. |
-| `VITE_BRAND_NAME` | No | OpenReel's own name | Product name shown in the editor. |
+| `VITE_BRAND_NAME` | No | `N-Remote Video` | Product name shown in the editor. |
 | `VITE_BRAND_LOGO_URL` | No | OpenReel's own logo | Logo shown in the editor. Must be a same-origin path such as `/brand/logo.svg` under `apps/web/public`, because the page is served with `Cross-Origin-Embedder-Policy: require-corp`. |
 | `VITE_OPENREEL_CLOUD_URL` | No | empty (cloud off) | Upstream OpenReel cloud URL. Leave empty to switch share links and cloud templates off. |
 | `VITE_PUBLIC_POSTHOG_KEY`, `VITE_PUBLIC_POSTHOG_HOST` | No | empty (analytics off) | PostHog analytics. Leave empty. |
@@ -172,6 +175,10 @@ App environment variables (set for **both Production and Preview** in the Pages 
 - `VITE_BRAND_LOGO_URL`: optional, same-origin path only (see the table above).
 - `VITE_OPENREEL_CLOUD_URL`: left **empty** (cloud off).
 
+`apps/web/wrangler.toml` sits in the Pages root directory (`apps/web`), so Pages reads it.
+
+**First build:** open a good launch link and confirm it is accepted (the "Editing for <label>" banner shows). If every launch is refused, the `VITE_*` values did not reach the build: they are baked in at build time, so set them in the Pages project and rebuild.
+
 `apps/web/public/_headers` sets COOP/COEP for static responses only. Pages Functions responses (the `functions/api/proxy` AI key relay) are JSON fetches and do not need them.
 
 ## What is switched off on this host
@@ -181,7 +188,10 @@ App environment variables (set for **both Production and Preview** in the Pages 
 
 AI editing (OpenAI, Anthropic, ElevenLabs) works with the user's own key, relayed by the same-origin Pages Function.
 
-**Known external dependency:** auto-caption models are downloaded by the browser from `https://media.openreel.video/models/` (`apps/web/src/workers/whisper-worker.ts`). No user content is sent there, but captions depend on that host being up. Follow-up: point `MODEL_HOST` at the Hugging Face default when the cloud is off.
+**Known external dependencies (inbound only):**
+
+- Auto-caption models are downloaded by the browser from `https://media.openreel.video/models/` (`apps/web/src/workers/whisper-worker.ts`). No user content is sent there, but captions depend on that host being up. Follow-up: point `MODEL_HOST` at the Hugging Face default when the cloud is off.
+- Video stabilization downloads its vidstab wasm build from `https://mediashares.openreel.video/ffmpeg-vidstab/` (`packages/core/src/video/stabilization/vidstab-engine.ts:26-27`). Same framing: no user content is sent there, but stabilization depends on that host being up.
 
 ## Rebasing on upstream
 
@@ -196,6 +206,8 @@ grep -rn "N-REMOTE INTEGRATION" apps/web/src apps/web/index.html
 ```
 
 lists every upstream edit. `apps/web/src/vite-env.d.ts` and `apps/web/index.html` are N-Remote touch points that may collide if upstream adds its own changes there.
+
+The fork deletes four upstream workflows (`.github/workflows/claude.yml`, `copilot-code-review.yml`, `label-for-claude.yml`, `release.yml`). If upstream edits one of them, the rebase reports a modify/delete conflict; resolve it by deleting the file again (`git rm <file>`).
 
 ## Manual acceptance checklist
 

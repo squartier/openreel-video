@@ -32,7 +32,12 @@ export interface SendDeps {
   fetchFn?: FetchLike;
   xhrFactory?: () => XMLHttpRequest;
   allowedUploadOrigins?: string[];
+  /** Aborting it cancels the send: the in-flight fetch or XHR is abandoned (maps to network). */
+  signal?: AbortSignal;
 }
+
+/** Init and complete each get this long before they count as unreachable. */
+export const REQUEST_TIMEOUT_MS = 30_000;
 
 type Progress = (p: { phase: SendPhase; fraction: number }) => void;
 
@@ -48,6 +53,34 @@ function fail(failure: SendFailure): { ok: false; failure: SendFailure } {
   return { ok: false, failure };
 }
 
+/**
+ * A signal that aborts after `ms` or when `outer` aborts, whichever comes first
+ * (a manual combiner: AbortSignal.any / AbortSignal.timeout are not everywhere,
+ * and a plain setTimeout is cleared as soon as the request settles).
+ * `aborted` rejects once the signal aborts, so a request that ignores the
+ * signal still cannot hang the send.
+ */
+function deadline(ms: number, outer: AbortSignal | undefined) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const timer = setTimeout(abort, ms);
+  if (outer?.aborted) abort();
+  else outer?.addEventListener("abort", abort, { once: true });
+  const aborted = new Promise<never>((_, reject) => {
+    if (controller.signal.aborted) reject(new Error("aborted"));
+    else controller.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+  });
+  aborted.catch(() => undefined); // never an unhandled rejection
+  return {
+    signal: controller.signal,
+    race: <T>(p: Promise<T>): Promise<T> => Promise.race([p, aborted]),
+    dispose: () => {
+      clearTimeout(timer);
+      outer?.removeEventListener("abort", abort);
+    },
+  };
+}
+
 /** POST JSON with the session token and map every failure per the contract. */
 async function postJson(
   session: LaunchSession,
@@ -55,18 +88,41 @@ async function postJson(
   phase: "init" | "complete",
   url: string,
   body: unknown,
+  outerSignal: AbortSignal | undefined,
+): Promise<Step<Record<string, unknown>>> {
+  const limit = deadline(REQUEST_TIMEOUT_MS, outerSignal);
+  try {
+    return await postJsonWithin(session, fetchFn, phase, url, body, limit);
+  } finally {
+    limit.dispose();
+  }
+}
+
+async function postJsonWithin(
+  session: LaunchSession,
+  fetchFn: FetchLike,
+  phase: "init" | "complete",
+  url: string,
+  body: unknown,
+  limit: ReturnType<typeof deadline>,
 ): Promise<Step<Record<string, unknown>>> {
   let response: Awaited<ReturnType<FetchLike>>;
   try {
-    response = await fetchFn(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    response = await limit.race(
+      fetchFn(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        // Never follow a redirect with the Bearer token (defence in depth).
+        redirect: "error",
+        signal: limit.signal,
+      }),
+    );
   } catch {
+    // Network error, timeout, caller abort or a refused redirect.
     return fail({
       kind: "network",
       phase,
@@ -86,7 +142,7 @@ async function postJson(
 
   let json: Record<string, unknown>;
   try {
-    json = (await response.json()) as Record<string, unknown>;
+    json = (await limit.race(response.json())) as Record<string, unknown>;
   } catch {
     return fail({
       kind: "network",
@@ -119,6 +175,7 @@ async function runInit(
   session: LaunchSession,
   meta: SendMeta,
   fetchFn: FetchLike,
+  signal: AbortSignal | undefined,
 ): Promise<Step<{ upload: UploadTarget; completeUrl: string }>> {
   const step = await postJson(session, fetchFn, "init", session.returnUrl, {
     v: 1,
@@ -129,7 +186,7 @@ async function runInit(
     durationSec: meta.durationSec,
     width: meta.width,
     height: meta.height,
-  });
+  }, signal);
   if (!step.ok) return step;
 
   const upload = step.value.upload as
@@ -196,6 +253,7 @@ async function runUpload(
       file,
       (fraction) => onProgress({ phase: "upload", fraction }),
       deps.xhrFactory,
+      deps.signal,
     );
     if (status < 200 || status >= 300) {
       return fail({
@@ -220,6 +278,7 @@ async function runComplete(
   meta: SendMeta,
   completeUrl: string,
   fetchFn: FetchLike,
+  signal: AbortSignal | undefined,
 ): Promise<Step<{ url?: string; message?: string }>> {
   const step = await postJson(session, fetchFn, "complete", completeUrl, {
     v: 1,
@@ -229,7 +288,7 @@ async function runComplete(
     durationSec: meta.durationSec,
     width: meta.width,
     height: meta.height,
-  });
+  }, signal);
   if (!step.ok) return step;
   const { url, message } = step.value;
   return {
@@ -251,19 +310,22 @@ export async function sendExport(
   const fetchFn: FetchLike = deps.fetchFn ?? ((i, init) => fetch(i, init));
 
   onProgress({ phase: "init", fraction: 0 });
-  const init = await runInit(session, meta, fetchFn);
+  const init = await runInit(session, meta, fetchFn, deps.signal);
   if (!init.ok) return { ok: false, ...init.failure };
 
   const upload = await runUpload(session, file, init.value.upload, onProgress, deps);
   if (!upload.ok) return { ok: false, ...upload.failure };
 
   onProgress({ phase: "complete", fraction: 1 });
-  const done = await runComplete(session, meta, init.value.completeUrl, fetchFn);
+  if (deps.signal?.aborted) {
+    return { ok: false, kind: "network", phase: "upload", message: "Upload failed (network)" };
+  }
+  const done = await runComplete(session, meta, init.value.completeUrl, fetchFn, deps.signal);
   if (!done.ok) return { ok: false, ...done.failure };
   return { ok: true, ...done.value };
 }
 
-/** XHR PUT of a Blob with upload progress. Rejects only on network error/timeout. */
+/** XHR PUT of a Blob with upload progress. Rejects only on network error/timeout/abort. */
 export function uploadWithProgress(
   url: string,
   method: string,
@@ -271,18 +333,34 @@ export function uploadWithProgress(
   body: Blob,
   onProgress: (fraction: number) => void,
   xhrFactory: () => XMLHttpRequest = () => new XMLHttpRequest(),
+  signal?: AbortSignal,
 ): Promise<{ status: number }> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error("Upload failed (network)"));
+      return;
+    }
     const xhr = xhrFactory();
+    const onAbortSignal = () => xhr.abort();
+    const settle = () => signal?.removeEventListener("abort", onAbortSignal);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
         onProgress(event.loaded / event.total);
       }
     };
-    xhr.onload = () => resolve({ status: xhr.status });
-    xhr.onerror = () => reject(new Error("Upload failed (network)"));
-    xhr.ontimeout = () => reject(new Error("Upload failed (network)"));
-    xhr.onabort = () => reject(new Error("Upload failed (network)"));
+    xhr.onload = () => {
+      settle();
+      resolve({ status: xhr.status });
+    };
+    const failed = () => {
+      settle();
+      reject(new Error("Upload failed (network)"));
+    };
+    xhr.onerror = failed;
+    xhr.ontimeout = failed;
+    // onabort fires for xhr.abort() from the caller's signal: maps to network.
+    xhr.onabort = failed;
+    signal?.addEventListener("abort", onAbortSignal, { once: true });
     xhr.open(method, url);
     for (const [key, value] of Object.entries(headers)) {
       xhr.setRequestHeader(key, value);

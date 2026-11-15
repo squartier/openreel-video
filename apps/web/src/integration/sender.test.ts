@@ -37,7 +37,8 @@ const res = (status: number, body: unknown) => ({
 class FakeXhr {
   static instances: FakeXhr[] = [];
   static nextStatus = 200;
-  static mode: "ok" | "error" | "abort" = "ok";
+  static mode: "ok" | "error" | "abort" | "hang" = "ok";
+  aborted = false;
   opened: [string, string] | null = null;
   headers: Record<string, string> = {};
   body: unknown = null;
@@ -57,8 +58,13 @@ class FakeXhr {
   setRequestHeader(k: string, v: string) {
     this.headers[k] = v;
   }
+  abort() {
+    this.aborted = true;
+    this.onabort?.();
+  }
   send(body: unknown) {
     this.body = body;
+    if (FakeXhr.mode === "hang") return;
     queueMicrotask(() => {
       if (FakeXhr.mode === "error") {
         this.onerror?.();
@@ -103,6 +109,8 @@ describe("sendExport", () => {
     const [url1, init1] = fetchFn.mock.calls[0];
     expect(url1).toBe(session.returnUrl);
     expect(init1.method).toBe("POST");
+    expect(init1.redirect).toBe("error");
+    expect(init1.signal).toBeInstanceOf(AbortSignal);
     expect(init1.headers).toEqual({
       Authorization: "Bearer t",
       "Content-Type": "application/json",
@@ -126,6 +134,8 @@ describe("sendExport", () => {
     const [url2, init2] = fetchFn.mock.calls[1];
     expect(url2).toBe("https://app.example/api/complete");
     expect(init2.method).toBe("POST");
+    expect(init2.redirect).toBe("error");
+    expect(init2.signal).toBeInstanceOf(AbortSignal);
     expect(init2.headers).toEqual({
       Authorization: "Bearer t",
       "Content-Type": "application/json",
@@ -313,5 +323,42 @@ describe("sendExport", () => {
       phase: "init",
       message: "Could not reach N-Remote Builder",
     });
+  });
+
+  it("aborting the caller's signal during the upload aborts the XHR and maps to network", async () => {
+    FakeXhr.mode = "hang";
+    const controller = new AbortController();
+    const fetchFn = vi.fn().mockResolvedValueOnce(res(200, initBody));
+    const progress = vi.fn();
+    const pending = sendExport(session, file, meta, progress, { fetchFn, xhrFactory, signal: controller.signal });
+    await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+    controller.abort();
+    const result = await pending;
+    expect(FakeXhr.instances[0].aborted).toBe(true);
+    expect(result).toEqual({ ok: false, kind: "network", phase: "upload", message: "Upload failed (network)" });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("an init fetch that never resolves times out after 30 s to network", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchFn = vi.fn(() => new Promise<never>(() => undefined));
+      const pending = sendExport(session, file, meta, vi.fn(), { fetchFn, xhrFactory });
+      await vi.advanceTimersByTimeAsync(29_999);
+      let settled = false;
+      void pending.then(() => { settled = true; });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toEqual({
+        ok: false,
+        kind: "network",
+        phase: "init",
+        message: "Could not reach N-Remote Builder",
+      });
+      expect(FakeXhr.instances).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

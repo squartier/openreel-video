@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LaunchSession } from "./launch-session";
 import type { SendDeps, SendMeta } from "./sender";
 import { useSendStore } from "./send-store";
-import { checkSendSize, downloadKeptFile, sendDeliveryOptions, startSend } from "./send-flow";
+import { cancelSend, checkSendSize, downloadKeptFile, sendDeliveryOptions, startSend } from "./send-flow";
 import { useLaunchSessionStore } from "./launch-session-store";
 import { toast } from "../stores/notification-store";
 
@@ -152,16 +152,25 @@ describe("startSend", () => {
     expect(s.file).toBe(file);
   });
 
-  it("retry restarts from init", async () => {
-    const fetchFn = vi.fn().mockResolvedValueOnce(res(500, { ok: false, message: "down" }));
+  it("retry restarts from init (even when the first attempt got as far as complete)", async () => {
+    // First attempt: init and upload succeed, complete fails.
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(initOk())
+      .mockResolvedValueOnce(res(500, { ok: false, message: "down" }));
     await startSend(good, file, "clip.mp4", meta, deps(fetchFn));
-    expect(useSendStore.getState().status).toBe("failed");
+    const first = useSendStore.getState();
+    expect(first.status).toBe("failed");
+    if (first.status !== "failed") throw new Error("unreachable");
+    expect(first.failure.phase).toBe("complete");
+    expect(FakeXhr.instances).toHaveLength(1);
 
     fetchFn.mockResolvedValueOnce(initOk()).mockResolvedValueOnce(res(200, { ok: true }));
     await startSend(good, file, "clip.mp4", meta, deps(fetchFn));
 
-    const initCalls = fetchFn.mock.calls.filter(([url]) => url === good.returnUrl);
-    expect(initCalls).toHaveLength(2);
+    const urls = fetchFn.mock.calls.map(([url]) => url);
+    expect(urls).toEqual([good.returnUrl, COMPLETE_URL, good.returnUrl, COMPLETE_URL]);
+    expect(FakeXhr.instances).toHaveLength(2);
     expect(useSendStore.getState().status).toBe("sent");
   });
 });
@@ -185,6 +194,45 @@ describe("generation guard", () => {
     if (s.status !== "sending") throw new Error("unreachable");
     expect(s.file).toBe(fileB);
     expect(s.filename).toBe("b.mp4");
+  });
+});
+
+describe("cancelSend", () => {
+  class HangingXhr extends FakeXhr {
+    aborted = false;
+    send() {}
+    abort() {
+      this.aborted = true;
+      this.onabort?.();
+    }
+  }
+
+  it("cancel during upload resets to idle; a late tick from the aborted send cannot reopen the dialog", async () => {
+    const fetchFn = vi.fn().mockResolvedValueOnce(initOk());
+    const pending = startSend(good, file, "clip.mp4", meta, {
+      ...deps(fetchFn),
+      xhrFactory: () => new HangingXhr() as unknown as XMLHttpRequest,
+    });
+    await vi.waitFor(() => {
+      const s = useSendStore.getState();
+      expect(s.status === "sending" && s.phase === "upload").toBe(true);
+    });
+    const xhr = FakeXhr.instances[0] as HangingXhr;
+
+    cancelSend();
+    expect(useSendStore.getState().status).toBe("idle");
+    expect(xhr.aborted).toBe(true);
+
+    // A late progress tick (and the aborted send's own failure) must not write.
+    xhr.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 });
+    await pending;
+    expect(useSendStore.getState().status).toBe("idle");
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a no-op reset when nothing is sending", () => {
+    expect(() => cancelSend()).not.toThrow();
+    expect(useSendStore.getState().status).toBe("idle");
   });
 });
 
@@ -289,5 +337,28 @@ describe("sendDeliveryOptions (the guarded onFile)", () => {
     expect(s.failure).toMatchObject({ kind: "network", phase: "init" });
     expect(s.file).toBe(file);
     expect(s.filename).toBe("clip.mp4");
+  });
+
+  it("the synchronous failure supersedes an older in-flight send (generation-guarded)", async () => {
+    let resolveA: (v: unknown) => void = () => undefined;
+    const fetchA = vi.fn(() => new Promise((r) => { resolveA = r; }));
+    const fileA = new Blob(["a"], { type: "video/mp4" });
+    const sendA = startSend(good, fileA, "a.mp4", meta, deps(fetchA));
+
+    useLaunchSessionStore.getState().setSession({ ...good, maxBytes: 1 });
+    vi.spyOn(toast, "error").mockImplementation(() => {
+      throw new Error("toast broke");
+    });
+    sendDeliveryOptions("mp4", {}, project).onFile(file, "clip.mp4");
+
+    resolveA(res(401, { ok: false }));
+    await sendA;
+
+    const s = useSendStore.getState();
+    expect(s.status).toBe("failed");
+    if (s.status !== "failed") throw new Error("unreachable");
+    expect(s.file).toBe(file);
+    expect(s.filename).toBe("clip.mp4");
+    expect(s.failure.message).toBe("toast broke");
   });
 });

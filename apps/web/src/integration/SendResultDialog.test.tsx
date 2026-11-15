@@ -8,9 +8,9 @@ import { SendResultDialog } from "./SendResultDialog";
 
 vi.mock("./send-flow", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./send-flow")>();
-  return { ...actual, startSend: vi.fn(async () => undefined) };
+  return { ...actual, startSend: vi.fn(async () => undefined), cancelSend: vi.fn() };
 });
-import { startSend } from "./send-flow";
+import { cancelSend, startSend } from "./send-flow";
 
 const good: LaunchSession = {
   v: 1,
@@ -58,6 +58,7 @@ describe("SendResultDialog", () => {
     useLaunchSessionStore.getState().clear();
     useSendStore.getState().reset();
     vi.mocked(startSend).mockClear();
+    vi.mocked(cancelSend).mockClear();
   });
   afterEach(() => {
     cleanup();
@@ -130,6 +131,23 @@ describe("SendResultDialog", () => {
     expect(create).toHaveBeenCalledTimes(4);
     for (const call of create.mock.calls as unknown as [Blob][]) expect(call[0]).toBe(file);
     expect(click).toHaveBeenCalledTimes(4);
+  });
+
+  it("shows Cancel while sending, which calls cancelSend; Download stays", () => {
+    show(sending);
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveAttribute("type", "button");
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
+    fireEvent.click(cancel);
+    expect(cancelSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no Cancel once the send has finished", () => {
+    for (const state of [sent, failed, expired]) {
+      show(state);
+      expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+      cleanup();
+    }
   });
 
   it("Close resets the send store", () => {

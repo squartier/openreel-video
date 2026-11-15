@@ -11,9 +11,11 @@ const isDev = import.meta.env.DEV;
 // N-REMOTE INTEGRATION: the cloud is opt-in. An unset or empty
 // VITE_OPENREEL_CLOUD_URL means OFF in production (nothing leaves the host);
 // dev keeps upstream's localhost default so upstream dev flows still work.
-const configuredCloudUrl = import.meta.env.VITE_OPENREEL_CLOUD_URL;
+// A whitespace-only value counts as unset too (trimmed, like branding.ts).
+const rawCloudUrl = import.meta.env.VITE_OPENREEL_CLOUD_URL;
+const configuredCloudUrl = typeof rawCloudUrl === "string" ? rawCloudUrl.trim() : "";
 export const OPENREEL_CLOUD_URL: string =
-  typeof configuredCloudUrl === "string" && configuredCloudUrl !== ""
+  configuredCloudUrl !== ""
     ? configuredCloudUrl
     : isDev
       ? "http://localhost:8787"

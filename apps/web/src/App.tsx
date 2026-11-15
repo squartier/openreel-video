@@ -10,6 +10,8 @@ import { useProjectRecovery } from "./hooks/useProjectRecovery";
 import { useKieAIPoller } from "./hooks/useKieAIPoller";
 // N-REMOTE INTEGRATION
 import { CLOUD_ENABLED } from "./config/api-endpoints";
+// N-REMOTE INTEGRATION
+import { LaunchBanner, useLaunchBannerVisible } from "./integration/LaunchBanner";
 import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core";
 import { ToolcraftText as Text } from "@openreel/ui";
 
@@ -56,6 +58,8 @@ function App() {
   const { route, params, navigate, parsedDimensions, fps } = useRouter();
   const hasHandledInitialRoute = useRef(false);
   useKieAIPoller();
+  // N-REMOTE INTEGRATION: the fixed launch banner needs a matching top offset
+  const launchBannerVisible = useLaunchBannerVisible();
   // N-REMOTE INTEGRATION: with the cloud off, a share route shows the welcome screen
   const showWelcome =
     (["welcome", "templates", "recent"].includes(route) || (!CLOUD_ENABLED && route === "share")) &&
@@ -161,8 +165,11 @@ function App() {
         : undefined;
 
   return (
-    <div className="h-screen h-[100dvh] w-screen bg-background text-text-primary overflow-hidden">
+    // N-REMOTE INTEGRATION: pt-8 = the launch banner's height (h-8) while it renders
+    <div className={`h-screen h-[100dvh] w-screen bg-background text-text-primary overflow-hidden${launchBannerVisible ? " pt-8" : ""}`}>
       <MobileBlocker />
+      {/* N-REMOTE INTEGRATION: above the route switch so it also shows over the welcome screen */}
+      <LaunchBanner />
       {isSharePage ? (
         <Suspense fallback={<LoadingSpinner message="Loading shared video..." />}>
           <SharePage shareId={params.shareId!} />

@@ -50,6 +50,15 @@ describe("upstream cloud off", () => {
     expect(mod.OPENREEL_CLOUD_URL).toBe("");
   });
 
+  it("a whitespace-only VITE_OPENREEL_CLOUD_URL counts as unset (cloud off)", async () => {
+    vi.stubEnv("VITE_OPENREEL_CLOUD_URL", "   ");
+    vi.stubEnv("DEV", false);
+    vi.resetModules();
+    const mod = await import("@/config/api-endpoints");
+    expect(mod.CLOUD_ENABLED).toBe(false);
+    expect(mod.OPENREEL_CLOUD_URL).toBe("");
+  });
+
   it("welcome screen shows the brand name and no Templates button when cloud is off", async () => {
     const { WelcomeScreen } = await loadFreshApp();
     render(<WelcomeScreen />);
