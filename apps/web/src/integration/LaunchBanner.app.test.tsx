@@ -53,7 +53,7 @@ describe("LaunchBanner on arrival (welcome route)", () => {
     window.location.hash = "#/";
     render(<App />);
     // The welcome screen is present...
-    await waitFor(() => expect(screen.getAllByText("N-Remote Video").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("NR Video").length).toBeGreaterThan(0));
     // ...and the banner is visible with it, not hidden inside the editor.
     expect(screen.getByRole("status")).toHaveTextContent("Editing for N-Remote Builder");
     useLaunchSessionStore.getState().clear();
@@ -64,7 +64,7 @@ describe("LaunchBanner on arrival (welcome route)", () => {
     useLaunchSessionStore.getState().setRefusal("expired");
     window.location.hash = "#/";
     render(<App />);
-    await waitFor(() => expect(screen.getAllByText("N-Remote Video").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("NR Video").length).toBeGreaterThan(0));
     expect(screen.getByRole("alert")).toHaveTextContent(/could not start the session/i);
     useLaunchSessionStore.getState().clear();
   });

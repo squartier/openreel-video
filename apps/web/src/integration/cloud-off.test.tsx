@@ -62,7 +62,7 @@ describe("upstream cloud off", () => {
   it("welcome screen shows the brand name and no Templates button when cloud is off", async () => {
     const { WelcomeScreen } = await loadFreshApp();
     render(<WelcomeScreen />);
-    expect(screen.getByText("N-Remote Video")).toBeTruthy();
+    expect(screen.getByText("NR Video")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /templates/i })).toBeNull();
   });
 
@@ -70,7 +70,7 @@ describe("upstream cloud off", () => {
     const { App } = await loadFreshApp();
     window.location.hash = "#/share/abc";
     render(<App />);
-    await waitFor(() => expect(screen.getByText("N-Remote Video")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("NR Video")).toBeTruthy());
     expect(screen.queryByText("Shared video")).toBeNull();
   });
 

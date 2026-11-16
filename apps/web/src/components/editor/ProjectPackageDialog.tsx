@@ -10,6 +10,7 @@ import { autoSaveManager } from "../../services/auto-save";
 import { loadMediaBlob, saveMediaBlob, deleteMediaBlob } from "../../services/media-storage";
 import { createProjectPackage, readProjectPackage, copyPackagedProject, projectMediaSummary } from "../../services/project-package";
 import { exportFilename } from "../../services/export-runner";
+import { BRAND_NAME } from "../../integration/branding"; // N-REMOTE INTEGRATION
 import { restoreMediaItem } from "../../utils/media-recovery";
 import { projectManager } from "../../services/project-manager";
 
@@ -64,7 +65,7 @@ export function ProjectPackageDialog({ onClose }: { onClose: () => void }) {
         // Request the picker before any async work to preserve user activation.
         const picker = (window as Window & { showSaveFilePicker?: (options: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
         if (!picker) throw new Error("Use Download backup in this browser.");
-        const handle = await picker.call(window, { suggestedName: exportFilename(snapshot.name, "oreelpack"), types: [{ description: "OpenReel project with media", accept: { "application/octet-stream": [".oreelpack"] } }] });
+        const handle = await picker.call(window, { suggestedName: exportFilename(snapshot.name, "oreelpack"), types: [{ description: `${BRAND_NAME} project with media` /* N-REMOTE INTEGRATION */, accept: { "application/octet-stream": [".oreelpack"] } }] });
         abort.signal.throwIfAborted();
         writable = await handle.createWritable();
       }

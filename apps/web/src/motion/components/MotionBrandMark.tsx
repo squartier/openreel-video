@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { BRAND_NAME } from "../../integration/branding"; // N-REMOTE INTEGRATION
 
 export function MotionBrandMark({
   size = 26,
@@ -17,7 +18,8 @@ export function MotionBrandMark({
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       role="img"
-      aria-label="OpenReel"
+      // N-REMOTE INTEGRATION
+      aria-label={BRAND_NAME}
     >
       <polygon points="16,2.5 16,16 4,16" fill="#2ee0a3" />
       <polygon points="16,2.5 28,16 16,16" fill="#16c08a" />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ToolcraftText as Text } from "@openreel/ui";
+import { BRAND_NAME } from "../integration/branding"; // N-REMOTE INTEGRATION
 
 export function supportsBrowserEditing(): boolean {
   try {
@@ -20,7 +21,8 @@ export function MobileBlocker() {
     <div role="alert" className="fixed inset-0 z-[9999] bg-background flex items-center justify-center p-6">
       <div className="max-w-md text-center space-y-4">
         <Text type="body" weight="bold" display="block">Your browser needs an update</Text>
-        <Text type="supporting" display="block">OpenReel needs local file access and canvas rendering. Open this page in a current browser to edit on your phone, tablet or computer.</Text>
+        {/* N-REMOTE INTEGRATION */}
+        <Text type="supporting" display="block">{BRAND_NAME} needs local file access and canvas rendering. Open this page in a current browser to edit on your phone, tablet or computer.</Text>
       </div>
     </div>
   );

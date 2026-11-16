@@ -38,7 +38,7 @@ describe("portable project packages", () => {
     const archive = await createProjectPackage(fixture());
     await expect(readProjectPackage(archive.slice(0, archive.size - 1))).rejects.toThrow("incomplete");
     await expect(readProjectPackage(new Blob([archive, "unexpected"]))).rejects.toThrow("trailing");
-    await expect(readProjectPackage(new Blob(["not an OpenReel package"]))).rejects.toThrow("not an OpenReel");
+    await expect(readProjectPackage(new Blob(["not a project package"]))).rejects.toThrow("project backup"); // N-REMOTE INTEGRATION: brand-agnostic
   });
   it("rejects a forged media size before slicing media", async () => {
     const archive = await createProjectPackage(fixture());

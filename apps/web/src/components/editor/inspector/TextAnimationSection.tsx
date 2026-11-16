@@ -4,6 +4,7 @@ import { ToolcraftSelectControl as Selector } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
 import { Type, Clock, Play } from "@/icons/lucide-compat";
 import { PropertySlider } from "./shell/PropertySlider";
+import { BRAND_NAME } from "../../../integration/branding"; // N-REMOTE INTEGRATION
 import { useProjectStore } from "../../../stores/project-store";
 import {
   TEXT_ANIMATION_PRESETS,
@@ -128,7 +129,7 @@ const TextAnimationPresetCard: React.FC<{
           className="text-[13px] font-black tracking-tight text-white"
           style={textAnimationPreviewStyle(preset.value, progress)}
         >
-          OpenReel
+          {BRAND_NAME} {/* N-REMOTE INTEGRATION */}
         </span>
       </span>
       <span className="block truncate text-[9px] font-semibold text-fg">

@@ -9,6 +9,7 @@ import { ToolcraftTextInputControl as TextInput } from "@openreel/ui";
 import { useSettingsStore, SERVICE_REGISTRY, type TtsProvider, type LlmProvider, type AggregatorProvider } from "../../../stores/settings-store";
 import { useProjectStore } from "../../../stores/project-store";
 import { EDITING_FRAME_RATE_OPTIONS } from "../editing-frame-rate";
+import { BRAND_NAME } from "../../../integration/branding"; // N-REMOTE INTEGRATION
 
 const ASPECT_PRESETS: Array<{ label: string; width: number; height: number }> = [
   { label: "16:9 Landscape (1080p)", width: 1920, height: 1080 },
@@ -319,7 +320,8 @@ export const GeneralPanel: React.FC = () => {
           AI Connections
         </Text>
         <Text type="supporting" color="secondary" className="text-xs">
-          Connect a compatible endpoint you control. OpenReel does not choose a vendor or model for you.
+          {/* N-REMOTE INTEGRATION */}
+          Connect a compatible endpoint you control. {BRAND_NAME} does not choose a vendor or model for you.
         </Text>
 
         <div className="space-y-3">

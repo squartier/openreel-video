@@ -1,3 +1,5 @@
+import { BRAND_NAME } from "../integration/branding"; // N-REMOTE INTEGRATION
+
 export type ShortcutCategory =
   | "playback"
   | "editing"
@@ -507,8 +509,8 @@ const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
 const PRESETS: ShortcutPreset[] = [
   {
     id: "openreel",
-    name: "OpenReel Default",
-    description: "Default OpenReel shortcuts",
+    name: `${BRAND_NAME} Default`, // N-REMOTE INTEGRATION
+    description: `Default ${BRAND_NAME} shortcuts`,
     shortcuts: {},
   },
   {
