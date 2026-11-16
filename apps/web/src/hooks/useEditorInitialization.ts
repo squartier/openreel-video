@@ -21,6 +21,7 @@ import {
   initializeTransitionBridge,
   disposeTransitionBridge,
 } from "../bridges/transition-bridge";
+import { useLaunchAssetLoader } from "../integration/useLaunchAssetLoader"; // N-REMOTE INTEGRATION
 
 /**
  * Engine and bridge initialization hook
@@ -138,6 +139,8 @@ export const useEditorInitialization = () => {
       disposeTransitionBridge();
     };
   }, [initialize, attempt]);
+
+  useLaunchAssetLoader(initialized && bridgesReady); // N-REMOTE INTEGRATION
 
   return {
     initialized: initialized && bridgesReady,

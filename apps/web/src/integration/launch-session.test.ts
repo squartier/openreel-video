@@ -62,4 +62,11 @@ describe("launch-session", () => {
     expect(stripLaunchParam("?launch=abc&x=1")).toBe("?x=1");
     expect(stripLaunchParam("?launch=abc")).toBe("");
   });
+  it("keeps valid https assets and drops malformed ones", () => {
+    const r = parseLaunchSession(
+      `?launch=${enc({ ...good, assets: [{ url: "https://x.supabase.co/v.webm", name: "v.webm" }, { url: "http://x/y", name: "y" }, 5] })}`,
+      { allowedReturnOrigins: ALLOWED },
+    );
+    expect(r).toEqual({ ok: true, session: { ...good, assets: [{ url: "https://x.supabase.co/v.webm", name: "v.webm" }] } });
+  });
 });

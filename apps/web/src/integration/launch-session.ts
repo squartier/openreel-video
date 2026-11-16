@@ -8,6 +8,13 @@ export interface LaunchSession {
   maxBytes?: number;
   suggested?: { container?: "mp4" | "webm"; preset?: string };
   expiresAt?: string; // ISO
+  // N-REMOTE INTEGRATION: caller media to pre-load onto the timeline (https only).
+  assets?: LaunchAsset[];
+}
+
+export interface LaunchAsset {
+  url: string;
+  name: string;
 }
 
 export type LaunchParseResult =
@@ -110,7 +117,21 @@ export function parseLaunchSession(
     }
   }
 
-  return { ok: true, session: o as unknown as LaunchSession };
+  // N-REMOTE INTEGRATION: keep only well-formed https assets; malformed entries are
+  // dropped rather than refusing the whole launch.
+  const session = { ...o } as unknown as LaunchSession;
+  delete (session as { assets?: unknown }).assets;
+  if (Array.isArray(o.assets)) {
+    const assets = o.assets.filter(
+      (a): a is LaunchAsset =>
+        typeof a === "object" && a !== null &&
+        isNonEmptyString((a as LaunchAsset).url) &&
+        (a as LaunchAsset).url.startsWith("https://") &&
+        isNonEmptyString((a as LaunchAsset).name),
+    ).slice(0, 5).map((a) => ({ url: a.url, name: a.name }));
+    if (assets.length) session.assets = assets;
+  }
+  return { ok: true, session };
 }
 
 export function stripLaunchParam(search: string): string {
