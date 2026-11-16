@@ -10,13 +10,13 @@ export function useLaunchAssetLoader(initialized: boolean): void {
   const session = useLaunchSessionStore((s) => s.session);
 
   useEffect(() => {
-    const assets = session?.assets;
-    if (!initialized || !assets?.length) return;
+    if (!initialized || !session?.assets?.length) return;
+    const { assets, token } = session;
     // Once per launch token, so reloads in the same tab do not import twice.
-    if (sessionStorage.getItem(DONE_KEY) === session.token) return;
+    if (sessionStorage.getItem(DONE_KEY) === token) return;
     const { project } = useProjectStore.getState();
     if (project.timeline.tracks.some((t) => t.clips.length > 0)) return;
-    sessionStorage.setItem(DONE_KEY, session.token);
+    sessionStorage.setItem(DONE_KEY, token);
 
     let cancelled = false;
     (async () => {
