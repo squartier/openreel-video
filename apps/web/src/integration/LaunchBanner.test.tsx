@@ -51,7 +51,7 @@ describe("LaunchBanner", () => {
     useLaunchSessionStore.getState().setRefusal("origin-not-allowed");
     render(<LaunchBanner />);
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "N-Remote Video could not start the session from this link: the calling app is not allowed (origin-not-allowed).",
+      "NR Video could not start the session from this link: the calling app is not allowed (origin-not-allowed).",
     );
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("alert")).toBeNull();

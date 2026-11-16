@@ -8,6 +8,7 @@ import {
   AlertTriangle,
 } from "@/icons/lucide-compat";
 import { ToolcraftButton as Button } from "@openreel/ui";
+import { BRAND_NAME } from "../../../integration/branding"; // N-REMOTE INTEGRATION
 import { ToolcraftCard as Card } from "@openreel/ui";
 import { ToolcraftIconButton as IconButton } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
@@ -131,7 +132,8 @@ export const TextToSpeechPanel: React.FC = () => {
       {!hasElevenLabsKey && (
         <Card variant="yellow" padding={2} className="border border-amber-500/30">
           <Text type="supporting" className="text-[10px] text-amber-400">
-            Add your ElevenLabs API key to enable speech generation. OpenReel no longer hosts a speech server.
+            {/* N-REMOTE INTEGRATION */}
+            Add your ElevenLabs API key to enable speech generation. {BRAND_NAME} no longer hosts a speech server.
           </Text>
         </Card>
       )}

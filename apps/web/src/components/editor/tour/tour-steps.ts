@@ -1,3 +1,6 @@
+// N-REMOTE INTEGRATION: product name.
+import { BRAND_NAME } from "../../../integration/branding";
+
 export interface TourStep {
   id: string;
   target: string | null;
@@ -11,7 +14,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
     target: null,
-    title: "Welcome to OpenReel",
+    title: `Welcome to ${BRAND_NAME}`, // N-REMOTE INTEGRATION
     description:
       "A quick map of the current editor layout: tools on the left, playback in the center, timeline below, and properties on the right.",
     position: "center",

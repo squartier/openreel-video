@@ -1,5 +1,6 @@
 import { createProjectSerializer, createStorageEngine, type MediaItem, type Project } from "@openreel/core";
 import { copyMediaBlobInChunks, needsStableMediaCopy } from "./stable-media-blob";
+import { BRAND_NAME } from "../integration/branding"; // N-REMOTE INTEGRATION
 
 // Media remains in Blob slices rather than being base64 encoded or copied into
 // a single JavaScript buffer. The same package can be streamed to a file.
@@ -64,9 +65,9 @@ export async function createProjectPackage(project: Project, options: PackageOpt
 
 export async function readProjectPackage(file: Blob, options: Pick<PackageOptions, "signal" | "onProgress"> = {}): Promise<Project> {
   checkCancelled(options.signal);
-  if (file.size < HEADER_BYTES) throw new Error("This is not an OpenReel project backup.");
+  if (file.size < HEADER_BYTES) throw new Error(`This is not a ${BRAND_NAME} project backup.`); // N-REMOTE INTEGRATION
   const header = await file.slice(0, HEADER_BYTES).arrayBuffer();
-  if (new TextDecoder().decode(header.slice(0, 12)) !== MAGIC) throw new Error("This is not an OpenReel project backup.");
+  if (new TextDecoder().decode(header.slice(0, 12)) !== MAGIC) throw new Error(`This is not a ${BRAND_NAME} project backup.`); // N-REMOTE INTEGRATION
   const length = new DataView(header).getUint32(12, true);
   if (!length || length > MAX_MANIFEST_BYTES || HEADER_BYTES + length > file.size) throw new Error("The backup metadata is incomplete or invalid.");
   let manifest: PackageManifest;

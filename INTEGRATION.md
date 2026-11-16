@@ -143,8 +143,8 @@ All are build-time (Vite) variables. Set them in `apps/web/.env` locally (see `a
 | --- | --- | --- | --- |
 | `VITE_ALLOWED_RETURN_ORIGINS` | Required for launch | none | Comma-separated origins a launch `returnUrl` may use. |
 | `VITE_ALLOWED_UPLOAD_ORIGINS` | Required for delivery | none | Comma-separated origins an upload target may use. |
-| `VITE_BRAND_NAME` | No | `N-Remote Video` | Product name shown in the editor. |
-| `VITE_BRAND_LOGO_URL` | No | OpenReel's own logo | Logo shown in the editor. Must be a same-origin path such as `/brand/logo.svg` under `apps/web/public`, because the page is served with `Cross-Origin-Embedder-Policy: require-corp`. |
+| `VITE_BRAND_NAME` | No | `NR Video` | Product name shown in the editor. |
+| `VITE_BRAND_LOGO_URL` | No | `/brand/logo.png` (the NR mark) | Logo shown in the editor. Must be a same-origin path under `apps/web/public`, because the page is served with `Cross-Origin-Embedder-Policy: require-corp`. |
 | `VITE_OPENREEL_CLOUD_URL` | No | empty (cloud off) | Upstream OpenReel cloud URL. Leave empty to switch share links and cloud templates off. |
 | `VITE_PUBLIC_POSTHOG_KEY`, `VITE_PUBLIC_POSTHOG_HOST` | No | empty (analytics off) | PostHog analytics. Leave empty. |
 
